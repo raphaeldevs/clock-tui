@@ -1,7 +1,7 @@
 use crate::clock_text::font::bricks::BricksFont;
 use crate::clock_text::ClockText;
 use crate::config::ClockWidgetConfig;
-use chrono::{Local, NaiveDateTime, Utc};
+use chrono::{Local, NaiveDateTime, Timelike, Utc};
 use chrono_tz::Tz;
 use ratatui::{
     buffer::Buffer,
@@ -128,10 +128,8 @@ impl Clock {
         };
         let time_str = if !self.show_secs {
             now.format("%H:%M").to_string()
-        } else if self.show_millis {
-            now.format("%H:%M:%S%.1f").to_string()
         } else {
-            now.format("%H:%M:%S").to_string()
+            format_clock_seconds(now, self.show_millis)
         };
         let time_str = time_str.as_str();
         let date = self
@@ -150,6 +148,14 @@ impl Clock {
             self.widgets.render_popup(area, buf, theme);
         }
     }
+}
+
+fn format_clock_seconds(now: NaiveDateTime, show_millis: bool) -> String {
+    let seconds = now.format("%H:%M:%S").to_string();
+    if show_millis {
+        return format!("{seconds}.{}", now.nanosecond() / 100_000_000);
+    }
+    seconds
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -229,6 +235,22 @@ impl Clock {
 mod tests {
     use super::*;
     use ratatui::style::Color;
+
+    #[test]
+    fn fractional_seconds_render_tenths_without_invalid_chrono_format() {
+        for (fraction, expected) in [("000", "0"), ("099", "0"), ("500", "5"), ("999", "9")] {
+            let now = NaiveDateTime::parse_from_str(
+                &format!("2026-10-15 12:34:01.{fraction}"),
+                "%Y-%m-%d %H:%M:%S%.f",
+            )
+            .unwrap();
+            assert_eq!(
+                format_clock_seconds(now, true),
+                format!("12:34:01.{expected}")
+            );
+            assert_eq!(format_clock_seconds(now, false), "12:34:01");
+        }
+    }
 
     #[test]
     fn widgets_get_extra_height_when_width_limits_square_clock() {
